@@ -320,17 +320,22 @@
 ;; ImGui edits this memory directly once we register it below, and GOAL reads it
 ;; when rerolling, so the menu and the game always agree.
 (deftype input-delay-settings (structure)
-  ((roll-min float)  ;; low end of the random delay roll (seconds)
-   (roll-max float)  ;; high end of the random delay roll (seconds)
+  ((roll-min  float)  ;; low end of the random delay roll (seconds)
+   (roll-max  float)  ;; high end of the random delay roll (seconds)
+   (mode      int32)  ;; 0 = delay, 1 = scramble (random 1:1 input remap)
+   (reshuffle int32)  ;; bumped by the ImGui "Reshuffle" button
    ))
 
 ;; global config + storage for all four controllers.
 (deftype input-delay-info (basic)
-  ((enabled?  symbol)     ;; is the delay active?
-   (delay     time-frame) ;; how far back to play input from
-   (random?   symbol)     ;; if #t, reroll `delay` on every power cell
-   (last-fuel float)      ;; last-seen power-cell count (-1.0 = not yet synced)
-   (buffers   input-delay-buffer 4)
+  ((enabled?      symbol)     ;; is the mod active?
+   (delay         time-frame) ;; how far back to play input from (delay mode)
+   (random?       symbol)     ;; if #t, reroll `delay` on every power cell
+   (last-fuel     float)      ;; last-seen power-cell count (-1.0 = not yet synced)
+   (scrambled?    symbol)     ;; is a scramble mapping currently seeded?
+   (last-reshuffle int32)     ;; last-seen ImGui reshuffle counter
+   (perm          uint8 24)   ;; scramble permutation: source signal -> dest signal
+   (buffers       input-delay-buffer 4)
    )
   (:methods
    (new (symbol type) _type_)))
@@ -341,6 +346,8 @@
     (set! (-> this delay) (seconds 1)) ;; default: 1 second of delay
     (set! (-> this random?) #t)        ;; default: reroll the delay on each power cell
     (set! (-> this last-fuel) -1.0)    ;; sentinel: sync without rerolling on first frame
+    (set! (-> this scrambled?) #f)
+    (set! (-> this last-reshuffle) 0)
     (dotimes (i 4)
       (set! (-> this buffers i) (new 'global 'input-delay-buffer)))
     this))
@@ -351,6 +358,8 @@
 (define *input-delay-settings* (new 'global 'input-delay-settings))
 (set! (-> *input-delay-settings* roll-min) 0.0)
 (set! (-> *input-delay-settings* roll-max) 5.0)
+(set! (-> *input-delay-settings* mode) 0)      ;; start in delay mode
+(set! (-> *input-delay-settings* reshuffle) 0)
 ;; hand the pointer to C++ so the "Input Delay" ImGui menu edits this same struct.
 (pc-register-input-delay-settings *input-delay-settings*)
 
@@ -463,16 +472,134 @@
   (none))
 
 (defun input-delay-enable! ((on symbol))
-  "Turn the input delay on (#t) or off (#f) and clear old history."
+  "Turn the input mod on (#t) or off (#f) and clear old history."
   (set! (-> *input-delay* enabled?) on)
   (dotimes (i 4)
     (input-delay-reset (-> *input-delay* buffers i)))
   on)
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; SCRAMBLE INPUT MODE
+;; ---------------------------------------------------------------------------
+;; The second mode (mode 1). Instead of delaying input, every discrete input
+;; signal is remapped to another via a random permutation - a bijection, so
+;; every input is reachable and none is duplicated. The 24 signals are the 16
+;; button bits (indexed by their pad-buttons bit) plus 8 stick directions:
+;;   16=LS up 17=LS down 18=LS left 19=LS right 20=RS up 21=RS down 22=RS left 23=RS right
+;; Buttons map to buttons or stick pushes; stick directions map to buttons or
+;; other stick pushes, all through the same 1:1 mapping.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defconstant INPUT-SCRAMBLE-COUNT 24) ;; 16 buttons + 8 stick directions
+
+(defun input-scramble-shuffle! ()
+  "Build a fresh random 1:1 mapping of all 24 input signals (Fisher-Yates)."
+  (let ((perm (-> *input-delay* perm)))
+    ;; start from the identity mapping
+    (dotimes (i INPUT-SCRAMBLE-COUNT)
+      (set! (-> perm i) i))
+    ;; Fisher-Yates: for i from 23 down to 1, swap with a random j in [0, i]
+    (dotimes (k (+ INPUT-SCRAMBLE-COUNT -1))
+      (let* ((i (- (+ INPUT-SCRAMBLE-COUNT -1) k))
+             (j (rand-vu-int-range 0 i))
+             (tmp (-> perm i)))
+        (set! (-> perm i) (-> perm j))
+        (set! (-> perm j) tmp))))
+  (none))
+
+(defun input-axis-neg-mag ((axis uint))
+  "Magnitude (0-1) of a stick axis pushed toward 0 (up/left), past the deadzone."
+  (let ((n (/ (the float (- (the int axis) 128)) 127.0)))
+    (if (< n (- STICK_DEADZONE)) (fmin 1.0 (- n)) 0.0)))
+
+(defun input-axis-pos-mag ((axis uint))
+  "Magnitude (0-1) of a stick axis pushed toward 255 (down/right), past the deadzone."
+  (let ((n (/ (the float (- (the int axis) 128)) 127.0)))
+    (if (> n STICK_DEADZONE) (fmin 1.0 n) 0.0)))
+
+(defun input-scramble-src-mag ((pad cpad-info) (i int))
+  "How strongly source signal `i` is currently active on the real input (0-1)."
+  (cond
+    ((< i 16) (if (logtest? (-> pad button0) (ash 1 i)) 1.0 0.0))
+    (else
+     (case i
+       ((16) (input-axis-neg-mag (-> pad lefty)))  ;; left stick up
+       ((17) (input-axis-pos-mag (-> pad lefty)))  ;; left stick down
+       ((18) (input-axis-neg-mag (-> pad leftx)))  ;; left stick left
+       ((19) (input-axis-pos-mag (-> pad leftx)))  ;; left stick right
+       ((20) (input-axis-neg-mag (-> pad righty))) ;; right stick up
+       ((21) (input-axis-pos-mag (-> pad righty))) ;; right stick down
+       ((22) (input-axis-neg-mag (-> pad rightx))) ;; right stick left
+       ((23) (input-axis-pos-mag (-> pad rightx))) ;; right stick right
+       (else 0.0)))))
+
+(defun input-scramble-axis-out ((v float))
+  "Convert a signed stick contribution (-1..1) back to a 0-255 axis value."
+  (the-as uint (max 0 (min 255 (the int (+ 128.0 (* v 127.0)))))))
+
+(defun input-scramble-apply ((pad cpad-info))
+  "Remap the real input through the permutation and write it back to the pad."
+  (let ((perm (-> *input-delay* perm))
+        (out-button0 (the-as uint 0))
+        (lsx 0.0)
+        (lsy 0.0)
+        (rsx 0.0)
+        (rsy 0.0))
+    ;; read all real source signals BEFORE overwriting the pad
+    (dotimes (i INPUT-SCRAMBLE-COUNT)
+      (let ((m (input-scramble-src-mag pad i)))
+        (when (> m 0.0)
+          (let ((d (the int (-> perm i))))
+            (cond
+              ((< d 16)
+               (set! out-button0 (logior out-button0 (the-as uint (ash 1 d)))))
+              (else
+               (case d
+                 ((16) (set! lsy (- lsy m)))
+                 ((17) (set! lsy (+ lsy m)))
+                 ((18) (set! lsx (- lsx m)))
+                 ((19) (set! lsx (+ lsx m)))
+                 ((20) (set! rsy (- rsy m)))
+                 ((21) (set! rsy (+ rsy m)))
+                 ((22) (set! rsx (- rsx m)))
+                 ((23) (set! rsx (+ rsx m))))))))))
+    ;; write the remapped state back to the pad
+    (set! (-> pad button0) out-button0)
+    (set! (-> pad leftx) (input-scramble-axis-out lsx))
+    (set! (-> pad lefty) (input-scramble-axis-out lsy))
+    (set! (-> pad rightx) (input-scramble-axis-out rsx))
+    (set! (-> pad righty) (input-scramble-axis-out rsy)))
+  (none))
+
+(defun input-scramble! ()
+  "Switch to scramble mode with a fresh random mapping, and enable the mod.
+   Call from the listener: (input-scramble!)"
+  (set! (-> *input-delay-settings* mode) 1)
+  (set! (-> *input-delay* enabled?) #t)
+  (input-scramble-shuffle!)
+  (set! (-> *input-delay* scrambled?) #t)
+  (none))
+
+(defun input-delay-mode! ()
+  "Switch back to delay mode. Call from the listener: (input-delay-mode!)"
+  (set! (-> *input-delay-settings* mode) 0)
+  (none))
+
 (defun service-cpads ()
   "Read from cpads and update vibration"
   ;; DELAYED INPUT MOD: once per frame, reroll the delay if a power cell was collected
   (input-delay-check-powercell)
+  ;; INPUT MOD: per-frame scramble housekeeping. reseed the 1:1 mapping when we
+  ;; (re)enter scramble mode or the ImGui "Reshuffle" button is pressed.
+  (let ((scramble-active? (and (-> *input-delay* enabled?)
+                               (= *master-mode* 'game)
+                               (= (-> *input-delay-settings* mode) 1))))
+    (when scramble-active?
+      (when (or (not (-> *input-delay* scrambled?))
+                (!= (-> *input-delay* last-reshuffle) (-> *input-delay-settings* reshuffle)))
+        (input-scramble-shuffle!)
+        (set! (-> *input-delay* last-reshuffle) (-> *input-delay-settings* reshuffle))))
+    (set! (-> *input-delay* scrambled?) scramble-active?))
   ;; iterate over pads
   (let ((pad-list *cpad-list*))
     (dotimes (pad-idx (-> pad-list num-cpads))
@@ -480,15 +607,18 @@
             (history (-> *cpad-history-list* cpads pad-idx)))
         ;; read from hardware.
         (cpad-get-data pad)
-        ;; DELAYED INPUT MOD: swap the just-read raw input for the input from
-        ;; `delay` seconds ago. Only while actually in gameplay and the pad is
-        ;; connected, so menus/pause stay responsive. Everything computed below
-        ;; (button0-abs/rel, stick dir, cheat codes) is then built from the
-        ;; delayed input automatically.
+        ;; INPUT MOD: transform the just-read raw input. Only while actually in
+        ;; gameplay and the pad is connected, so menus/pause stay responsive.
+        ;; Everything computed below (button0-abs/rel, stick dir, cheat codes) is
+        ;; then built from the transformed input automatically.
+        ;;   mode 0 = delay (play back input from `delay` seconds ago)
+        ;;   mode 1 = scramble (remap every input 1:1 through the permutation)
         (if (and (-> *input-delay* enabled?)
                  (= *master-mode* 'game)
                  (zero? (logand (-> pad valid) 128)))
-          (service-input-delay pad (-> *input-delay* buffers pad-idx))
+          (if (= (-> *input-delay-settings* mode) 1)
+            (input-scramble-apply pad)
+            (service-input-delay pad (-> *input-delay* buffers pad-idx)))
           (input-delay-reset (-> *input-delay* buffers pad-idx)))
         (cond
           ((zero? (logand (-> pad valid) 128))

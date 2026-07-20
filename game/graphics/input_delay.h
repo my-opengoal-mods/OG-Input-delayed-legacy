@@ -12,6 +12,8 @@
 struct InputDelaySettings {
   float roll_min;  // low end of the random delay roll, in seconds
   float roll_max;  // high end of the random delay roll, in seconds
+  s32 mode;        // 0 = delay, 1 = scramble (random 1:1 input remap)
+  s32 reshuffle;   // bump this to request a fresh scramble mapping
 };
 
 extern InputDelaySettings* g_input_delay_settings;

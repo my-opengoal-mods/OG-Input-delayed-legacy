@@ -132,19 +132,33 @@ void OpenGlDebugGui::draw(const DmaStats& dma_stats) {
     }
 
     if (ImGui::BeginMenu("Input Delay")) {
-      ImGui::TextUnformatted("Random delay roll range (seconds).");
-      ImGui::TextUnformatted("Rerolled on each Power Cell collected.");
+      ImGui::TextUnformatted("Mode:");
+      ImGui::RadioButton("Delay", &g_input_delay_settings->mode, 0);
+      ImGui::SameLine();
+      ImGui::RadioButton("Scramble Inputs", &g_input_delay_settings->mode, 1);
       ImGui::Separator();
-      ImGui::DragFloat("Roll Min", &g_input_delay_settings->roll_min, 0.05f, 0.0f,
-                       g_input_delay_settings->roll_max, "%.2f s");
-      ImGui::DragFloat("Roll Max", &g_input_delay_settings->roll_max, 0.05f,
-                       g_input_delay_settings->roll_min, 30.0f, "%.2f s");
-      // keep the range sane: min must never exceed max
-      if (g_input_delay_settings->roll_min > g_input_delay_settings->roll_max) {
-        g_input_delay_settings->roll_min = g_input_delay_settings->roll_max;
-      }
-      if (g_input_delay_settings->roll_min < 0.0f) {
-        g_input_delay_settings->roll_min = 0.0f;
+      if (g_input_delay_settings->mode == 0) {
+        ImGui::TextUnformatted("Random delay roll range (seconds).");
+        ImGui::TextUnformatted("Rerolled on each Power Cell collected.");
+        ImGui::Separator();
+        ImGui::DragFloat("Roll Min", &g_input_delay_settings->roll_min, 0.05f, 0.0f,
+                         g_input_delay_settings->roll_max, "%.2f s");
+        ImGui::DragFloat("Roll Max", &g_input_delay_settings->roll_max, 0.05f,
+                         g_input_delay_settings->roll_min, 30.0f, "%.2f s");
+        // keep the range sane: min must never exceed max
+        if (g_input_delay_settings->roll_min > g_input_delay_settings->roll_max) {
+          g_input_delay_settings->roll_min = g_input_delay_settings->roll_max;
+        }
+        if (g_input_delay_settings->roll_min < 0.0f) {
+          g_input_delay_settings->roll_min = 0.0f;
+        }
+      } else {
+        ImGui::TextUnformatted("Every button and stick direction is remapped");
+        ImGui::TextUnformatted("1:1 to another (bijection - no duplicates).");
+        ImGui::Separator();
+        if (ImGui::Button("Reshuffle Mapping")) {
+          g_input_delay_settings->reshuffle++;
+        }
       }
       ImGui::EndMenu();
     }

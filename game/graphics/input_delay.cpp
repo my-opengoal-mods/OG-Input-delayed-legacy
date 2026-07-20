@@ -7,7 +7,7 @@
  * sides read/write the same memory (see register_input_delay_settings).
  */
 
-InputDelaySettings s_default_input_delay_settings = {0.0f, 5.0f};
+InputDelaySettings s_default_input_delay_settings = {0.0f, 5.0f, 0, 0};
 
 InputDelaySettings* g_input_delay_settings = &s_default_input_delay_settings;
 

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "sourceName": "OG-Input-delayed-legacy",
-  "lastUpdated": "2026-07-20T21:01:21Z",
+  "lastUpdated": "2026-07-20T21:15:59Z",
   "mods": {
     "input-delayed": {
       "displayName": "Jak 1 the jak 3 legacy",
@@ -18,6 +18,23 @@
         "jak1"
       ],
       "versions": [
+        {
+          "version": "4.1.7",
+          "publishedDate": "2026-07-20T21:15:59Z",
+          "supportedGames": [
+            "jak1"
+          ],
+          "assets": {
+            "windows": "https://github.com/my-opengoal-mods/OG-Input-delayed-legacy/releases/download/v4.1.7/windows-v4.1.7.zip",
+            "linux": "https://github.com/my-opengoal-mods/OG-Input-delayed-legacy/releases/download/v4.1.7/linux-v4.1.7.tar.gz",
+            "macos": "https://github.com/my-opengoal-mods/OG-Input-delayed-legacy/releases/download/v4.1.7/macos-intel-v4.1.7.tar.gz"
+          },
+          "assetDownloadCounts": {
+            "windows": 0,
+            "linux": 0,
+            "macos": 0
+          }
+        },
         {
           "version": "4.1.6",
           "publishedDate": "2026-07-20T21:01:21Z",
