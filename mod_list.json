@@ -5,7 +5,7 @@
   "mods": {
     "input-delayed": {
       "displayName": "Jak 1 the jak 3 legacy",
-      "description": "A challenge mod: your controller input is recorded and played back on a delay, so you have to anticipate what happens before it happens. As of 4.1.5 the delay rerolls to a random value between 0.0 and 5.0 seconds every time you collect a Power Cell, so the challenge keeps shifting. Tune it from the goalc listener: (input-delay-random! 0.0 5.0), (set-input-delay! 0.5), or (input-delay-enable! #f).",
+      "description": "mike",
       "authors": [
         "Zed"
       ],
