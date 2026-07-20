@@ -320,10 +320,11 @@
 ;; ImGui edits this memory directly once we register it below, and GOAL reads it
 ;; when rerolling, so the menu and the game always agree.
 (deftype input-delay-settings (structure)
-  ((roll-min  float)  ;; low end of the random delay roll (seconds)
-   (roll-max  float)  ;; high end of the random delay roll (seconds)
-   (mode      int32)  ;; 0 = delay, 1 = scramble (random 1:1 input remap)
-   (reshuffle int32)  ;; bumped by the ImGui "Reshuffle" button
+  ((roll-min  float)     ;; low end of the random delay roll (seconds)
+   (roll-max  float)     ;; high end of the random delay roll (seconds)
+   (mode      int32)     ;; 0 = delay, 1 = scramble (random 1:1 input remap)
+   (reshuffle int32)     ;; bumped by the ImGui "Reshuffle" button
+   (perm      uint8 24)  ;; scramble mapping (source signal -> dest); shown in ImGui
    ))
 
 ;; global config + storage for all four controllers.
@@ -334,7 +335,6 @@
    (last-fuel     float)      ;; last-seen power-cell count (-1.0 = not yet synced)
    (scrambled?    symbol)     ;; is a scramble mapping currently seeded?
    (last-reshuffle int32)     ;; last-seen ImGui reshuffle counter
-   (perm          uint8 24)   ;; scramble permutation: source signal -> dest signal
    (buffers       input-delay-buffer 4)
    )
   (:methods
@@ -360,6 +360,8 @@
 (set! (-> *input-delay-settings* roll-max) 5.0)
 (set! (-> *input-delay-settings* mode) 0)      ;; start in delay mode
 (set! (-> *input-delay-settings* reshuffle) 0)
+(dotimes (i 24)                                ;; identity mapping until first shuffle
+  (set! (-> *input-delay-settings* perm i) i))
 ;; hand the pointer to C++ so the "Input Delay" ImGui menu edits this same struct.
 (pc-register-input-delay-settings *input-delay-settings*)
 
@@ -493,8 +495,9 @@
 (defconstant INPUT-SCRAMBLE-COUNT 24) ;; 16 buttons + 8 stick directions
 
 (defun input-scramble-shuffle! ()
-  "Build a fresh random 1:1 mapping of all 24 input signals (Fisher-Yates)."
-  (let ((perm (-> *input-delay* perm)))
+  "Build a fresh random 1:1 mapping of all 24 input signals (Fisher-Yates).
+   Written into the shared settings so the ImGui debug display can show it."
+  (let ((perm (-> *input-delay-settings* perm)))
     ;; start from the identity mapping
     (dotimes (i INPUT-SCRAMBLE-COUNT)
       (set! (-> perm i) i))
@@ -539,7 +542,7 @@
 
 (defun input-scramble-apply ((pad cpad-info))
   "Remap the real input through the permutation and write it back to the pad."
-  (let ((perm (-> *input-delay* perm))
+  (let ((perm (-> *input-delay-settings* perm))
         (out-button0 (the-as uint 0))
         (lsx 0.0)
         (lsy 0.0)

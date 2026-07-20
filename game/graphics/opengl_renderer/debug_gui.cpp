@@ -159,6 +159,25 @@ void OpenGlDebugGui::draw(const DmaStats& dma_stats) {
         if (ImGui::Button("Reshuffle Mapping")) {
           g_input_delay_settings->reshuffle++;
         }
+        ImGui::Separator();
+        ImGui::TextUnformatted("Current remapping (press -> does):");
+        if (ImGui::BeginTable("input_scramble_map", 3,
+                              ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_BordersInnerV)) {
+          for (int i = 0; i < INPUT_SCRAMBLE_COUNT; i++) {
+            int dst = g_input_delay_settings->perm[i];
+            if (dst < 0 || dst >= INPUT_SCRAMBLE_COUNT) {
+              dst = i;  // defensive: never index out of range
+            }
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::TextUnformatted(g_input_signal_names[i]);
+            ImGui::TableSetColumnIndex(1);
+            ImGui::TextUnformatted("->");
+            ImGui::TableSetColumnIndex(2);
+            ImGui::TextUnformatted(g_input_signal_names[dst]);
+          }
+          ImGui::EndTable();
+        }
       }
       ImGui::EndMenu();
     }
