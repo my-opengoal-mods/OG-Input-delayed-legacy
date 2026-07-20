@@ -7,6 +7,7 @@
 
 #include "game/graphics/display.h"
 #include "game/graphics/gfx.h"
+#include "game/graphics/input_delay.h"
 #include "game/graphics/screenshot.h"
 #include "game/overlord/jak3/dma.h"
 #include "game/system/hid/sdl_util.h"
@@ -127,6 +128,24 @@ void OpenGlDebugGui::draw(const DmaStats& dma_stats) {
       }
       ImGui::MenuItem("Subtitle Editor", nullptr, &m_subtitle_editor);
       ImGui::MenuItem("Debug Text Filter", nullptr, &m_filters_menu);
+      ImGui::EndMenu();
+    }
+
+    if (ImGui::BeginMenu("Input Delay")) {
+      ImGui::TextUnformatted("Random delay roll range (seconds).");
+      ImGui::TextUnformatted("Rerolled on each Power Cell collected.");
+      ImGui::Separator();
+      ImGui::DragFloat("Roll Min", &g_input_delay_settings->roll_min, 0.05f, 0.0f,
+                       g_input_delay_settings->roll_max, "%.2f s");
+      ImGui::DragFloat("Roll Max", &g_input_delay_settings->roll_max, 0.05f,
+                       g_input_delay_settings->roll_min, 30.0f, "%.2f s");
+      // keep the range sane: min must never exceed max
+      if (g_input_delay_settings->roll_min > g_input_delay_settings->roll_max) {
+        g_input_delay_settings->roll_min = g_input_delay_settings->roll_max;
+      }
+      if (g_input_delay_settings->roll_min < 0.0f) {
+        g_input_delay_settings->roll_min = 0.0f;
+      }
       ImGui::EndMenu();
     }
 

@@ -315,13 +315,20 @@
     (set! (-> this count) 0)
     this))
 
+;; the random roll range, shared with the C++ ImGui debug menu. the layout MUST
+;; match `struct InputDelaySettings` in game/graphics/input_delay.h (two floats).
+;; ImGui edits this memory directly once we register it below, and GOAL reads it
+;; when rerolling, so the menu and the game always agree.
+(deftype input-delay-settings (structure)
+  ((roll-min float)  ;; low end of the random delay roll (seconds)
+   (roll-max float)  ;; high end of the random delay roll (seconds)
+   ))
+
 ;; global config + storage for all four controllers.
 (deftype input-delay-info (basic)
   ((enabled?  symbol)     ;; is the delay active?
    (delay     time-frame) ;; how far back to play input from
    (random?   symbol)     ;; if #t, reroll `delay` on every power cell
-   (rand-min  float)      ;; low end of the random reroll range (seconds)
-   (rand-max  float)      ;; high end of the random reroll range (seconds)
    (last-fuel float)      ;; last-seen power-cell count (-1.0 = not yet synced)
    (buffers   input-delay-buffer 4)
    )
@@ -333,14 +340,19 @@
     (set! (-> this enabled?) #t)
     (set! (-> this delay) (seconds 1)) ;; default: 1 second of delay
     (set! (-> this random?) #t)        ;; default: reroll the delay on each power cell
-    (set! (-> this rand-min) 0.0)      ;; roll between 0.0 ...
-    (set! (-> this rand-max) 5.0)      ;; ... and 5.0 seconds
     (set! (-> this last-fuel) -1.0)    ;; sentinel: sync without rerolling on first frame
     (dotimes (i 4)
       (set! (-> this buffers i) (new 'global 'input-delay-buffer)))
     this))
 
 (define *input-delay* (new 'global 'input-delay-info))
+
+;; the roll range, owned by GOAL but edited live by the C++ ImGui menu.
+(define *input-delay-settings* (new 'global 'input-delay-settings))
+(set! (-> *input-delay-settings* roll-min) 0.0)
+(set! (-> *input-delay-settings* roll-max) 5.0)
+;; hand the pointer to C++ so the "Input Delay" ImGui menu edits this same struct.
+(pc-register-input-delay-settings *input-delay-settings*)
 
 (defun input-delay-reset ((buf input-delay-buffer))
   "Forget all recorded history so playback starts fresh."
@@ -418,11 +430,11 @@
   (none))
 
 (defun input-delay-reroll! ()
-  "Pick a new random delay in [rand-min, rand-max] seconds. This is what fires
-   after each power cell in random mode."
+  "Pick a new random delay in [roll-min, roll-max] seconds (the range set in the
+   ImGui menu). This is what fires after each power cell in random mode."
   (set! (-> *input-delay* delay)
-        (the-as time-frame (the int (* 300.0 (rand-vu-float-range (-> *input-delay* rand-min)
-                                                                  (-> *input-delay* rand-max))))))
+        (the-as time-frame (the int (* 300.0 (rand-vu-float-range (-> *input-delay-settings* roll-min)
+                                                                  (-> *input-delay-settings* roll-max))))))
   (-> *input-delay* delay))
 
 ;; defined in game-info.gc (needs *game-info*, which isn't declared this early).
@@ -440,10 +452,11 @@
   sec)
 
 (defun input-delay-random! ((lo float) (hi float))
-  "Enable random mode: the delay rerolls to a value in [lo, hi] seconds after
-   every power cell collected. Call e.g. (input-delay-random! 0.0 5.0)"
-  (set! (-> *input-delay* rand-min) lo)
-  (set! (-> *input-delay* rand-max) hi)
+  "Enable random mode and set the roll range (also reflected in the ImGui menu):
+   the delay rerolls to a value in [lo, hi] seconds after every power cell
+   collected. Call e.g. (input-delay-random! 0.0 5.0)"
+  (set! (-> *input-delay-settings* roll-min) lo)
+  (set! (-> *input-delay-settings* roll-max) hi)
   (set! (-> *input-delay* random?) #t)
   (set! (-> *input-delay* enabled?) #t)
   (input-delay-reroll!)

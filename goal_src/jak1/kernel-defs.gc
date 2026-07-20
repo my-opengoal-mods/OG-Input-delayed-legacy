@@ -619,6 +619,10 @@
 
 (define-extern pc-register-screen-shot-settings (function screen-shot-settings none))
 
+(declare-type input-delay-settings structure)
+
+(define-extern pc-register-input-delay-settings (function input-delay-settings none))
+
 (defenum pc-prof-event
   (begin 0)
   (end 1)

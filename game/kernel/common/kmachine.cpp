@@ -45,6 +45,7 @@ namespace MiniAudioLib {
 #include "game/graphics/display.h"
 #include "game/graphics/gfx.h"
 #include "game/graphics/screenshot.h"
+#include "game/graphics/input_delay.h"
 #include "game/kernel/common/Ptr.h"
 #include "game/kernel/common/kernel_types.h"
 #include "game/kernel/common/kprint.h"
@@ -1296,6 +1297,10 @@ void pc_register_screen_shot_settings(u32 ptr) {
   register_screen_shot_settings(Ptr<ScreenShotSettings>(ptr).c());
 }
 
+void pc_register_input_delay_settings(u32 ptr) {
+  register_input_delay_settings(Ptr<InputDelaySettings>(ptr).c());
+}
+
 void pc_encode_utf8_string(u32 src_str_ptr, u32 str_dest_ptr) {
   auto str = std::string(Ptr<String>(src_str_ptr).c()->data());
   std::string version = version_to_game_name(g_game_version);
@@ -1452,4 +1457,6 @@ void init_common_pc_port_functions(
   make_func_symbol_func("pc-screen-shot", (void*)pc_screen_shot);
   make_func_symbol_func("pc-register-screen-shot-settings",
                         (void*)pc_register_screen_shot_settings);
+  make_func_symbol_func("pc-register-input-delay-settings",
+                        (void*)pc_register_input_delay_settings);
 }

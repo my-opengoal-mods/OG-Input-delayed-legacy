@@ -34,6 +34,7 @@ set(RUNTIME_SOURCE
         graphics/jak3_texture_remap.cpp
         graphics/jakx_texture_remap.cpp
         graphics/screenshot.cpp
+        graphics/input_delay.cpp
         graphics/opengl_renderer/background/background_common.cpp
         graphics/opengl_renderer/background/Hfrag.cpp
         graphics/opengl_renderer/background/Shrub.cpp
