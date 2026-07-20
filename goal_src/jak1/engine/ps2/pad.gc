@@ -317,9 +317,13 @@
 
 ;; global config + storage for all four controllers.
 (deftype input-delay-info (basic)
-  ((enabled? symbol)     ;; is the delay active?
-   (delay    time-frame) ;; how far back to play input from
-   (buffers  input-delay-buffer 4)
+  ((enabled?  symbol)     ;; is the delay active?
+   (delay     time-frame) ;; how far back to play input from
+   (random?   symbol)     ;; if #t, reroll `delay` on every power cell
+   (rand-min  float)      ;; low end of the random reroll range (seconds)
+   (rand-max  float)      ;; high end of the random reroll range (seconds)
+   (last-fuel float)      ;; last-seen power-cell count (-1.0 = not yet synced)
+   (buffers   input-delay-buffer 4)
    )
   (:methods
    (new (symbol type) _type_)))
@@ -328,6 +332,10 @@
   (let ((this (object-new allocation type-to-make (the-as int (-> type-to-make size)))))
     (set! (-> this enabled?) #t)
     (set! (-> this delay) (seconds 1)) ;; default: 1 second of delay
+    (set! (-> this random?) #t)        ;; default: reroll the delay on each power cell
+    (set! (-> this rand-min) 0.0)      ;; roll between 0.0 ...
+    (set! (-> this rand-max) 5.0)      ;; ... and 5.0 seconds
+    (set! (-> this last-fuel) -1.0)    ;; sentinel: sync without rerolling on first frame
     (dotimes (i 4)
       (set! (-> this buffers i) (new 'global 'input-delay-buffer)))
     this))
@@ -409,14 +417,37 @@
     (input-delay-playback buf pad (- now (-> *input-delay* delay))))
   (none))
 
+(defun input-delay-reroll! ()
+  "Pick a new random delay in [rand-min, rand-max] seconds. This is what fires
+   after each power cell in random mode."
+  (set! (-> *input-delay* delay)
+        (the-as time-frame (the int (* 300.0 (rand-vu-float-range (-> *input-delay* rand-min)
+                                                                  (-> *input-delay* rand-max))))))
+  (-> *input-delay* delay))
+
+;; defined in game-info.gc (needs *game-info*, which isn't declared this early).
+;; called once per frame from service-cpads to reroll the delay on power cells.
+(define-extern input-delay-check-powercell (function none))
+
 (defun set-input-delay! ((sec float))
-  "Set the input delay (in seconds), enable it, and clear old history.
-   Call from the listener, e.g. (set-input-delay! 0.5)"
+  "Set a FIXED input delay (in seconds), enable it, turn off random mode, and
+   clear old history. Call from the listener, e.g. (set-input-delay! 0.5)"
   (set! (-> *input-delay* delay) (the-as time-frame (the int (* 300.0 sec)))) ;; 300 ticks/sec
   (set! (-> *input-delay* enabled?) #t)
+  (set! (-> *input-delay* random?) #f)
   (dotimes (i 4)
     (input-delay-reset (-> *input-delay* buffers i)))
   sec)
+
+(defun input-delay-random! ((lo float) (hi float))
+  "Enable random mode: the delay rerolls to a value in [lo, hi] seconds after
+   every power cell collected. Call e.g. (input-delay-random! 0.0 5.0)"
+  (set! (-> *input-delay* rand-min) lo)
+  (set! (-> *input-delay* rand-max) hi)
+  (set! (-> *input-delay* random?) #t)
+  (set! (-> *input-delay* enabled?) #t)
+  (input-delay-reroll!)
+  (none))
 
 (defun input-delay-enable! ((on symbol))
   "Turn the input delay on (#t) or off (#f) and clear old history."
@@ -427,6 +458,8 @@
 
 (defun service-cpads ()
   "Read from cpads and update vibration"
+  ;; DELAYED INPUT MOD: once per frame, reroll the delay if a power cell was collected
+  (input-delay-check-powercell)
   ;; iterate over pads
   (let ((pad-list *cpad-list*))
     (dotimes (pad-idx (-> pad-list num-cpads))

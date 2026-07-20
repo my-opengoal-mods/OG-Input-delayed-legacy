@@ -4,24 +4,24 @@
   "mods": {
     "input-delayed": {
       "displayName": "Input Delayed",
-      "description": "A challenge mod: your controller input is recorded and played back a configurable number of seconds later, so you have to anticipate what happens before it happens. Tune the delay from the goalc listener with (set-input-delay! 0.5) or toggle it with (input-delay-enable! #f).",
+      "description": "A challenge mod: your controller input is recorded and played back on a delay, so you have to anticipate what happens before it happens. As of 4.1.5 the delay rerolls to a random value between 0.0 and 5.0 seconds every time you collect a Power Cell, so the challenge keeps shifting. Tune it from the goalc listener: (input-delay-random! 0.0 5.0) for random mode, (set-input-delay! 0.5) for a fixed delay, or (input-delay-enable! #f) to turn it off.",
       "authors": ["Zedb0T"],
       "tags": ["challenge", "gameplay"],
       "websiteUrl": "https://github.com/my-opengoal-mods/OG-Input-delayed-legacy/blob/main/README.md",
       "supportedGames": ["jak1"],
       "versions": [
         {
-          "version": "4.1.4",
-          "publishedDate": "2026-07-20T19:24:52Z",
+          "version": "4.1.5",
+          "publishedDate": "2026-07-20T19:35:48Z",
           "supportedGames": ["jak1"],
           "settings": {
             "decompConfigOverride": "",
             "shareVanillaSaves": false
           },
           "assets": {
-            "windows": "https://github.com/my-opengoal-mods/OG-Input-delayed-legacy/releases/download/v4.1.4/windows-v4.1.4.zip",
-            "linux": "https://github.com/my-opengoal-mods/OG-Input-delayed-legacy/releases/download/v4.1.4/linux-v4.1.4.tar.gz",
-            "macos": "https://github.com/my-opengoal-mods/OG-Input-delayed-legacy/releases/download/v4.1.4/macos-intel-v4.1.4.tar.gz"
+            "windows": "https://github.com/my-opengoal-mods/OG-Input-delayed-legacy/releases/download/v4.1.5/windows-v4.1.5.zip",
+            "linux": "https://github.com/my-opengoal-mods/OG-Input-delayed-legacy/releases/download/v4.1.5/linux-v4.1.5.tar.gz",
+            "macos": "https://github.com/my-opengoal-mods/OG-Input-delayed-legacy/releases/download/v4.1.5/macos-intel-v4.1.5.tar.gz"
           },
           "assetDownloadCounts": {
             "windows": 0,

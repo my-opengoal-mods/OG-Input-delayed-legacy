@@ -708,3 +708,18 @@
 
 (defmethod get-health-percent-lost ((this game-info) (arg0 symbol))
   (* 0.25 (the float (get-death-count this #f))))
+
+;; DELAYED INPUT MOD: forward-declared in engine/ps2/pad.gc and called once per
+;; frame from service-cpads. Watches the power-cell (fuel) count; each time it
+;; goes up, roll a fresh random input delay. Lives here (not pad.gc) because
+;; *game-info* isn't declared yet when pad.gc compiles.
+(defun input-delay-check-powercell ()
+  (when *game-info*
+    (let ((cur (-> *game-info* fuel)))
+      (when (and (-> *input-delay* enabled?)
+                 (-> *input-delay* random?)
+                 (>= (-> *input-delay* last-fuel) 0.0) ;; skip the initial sync frame
+                 (> cur (-> *input-delay* last-fuel))) ;; a power cell was gained
+        (input-delay-reroll!))
+      (set! (-> *input-delay* last-fuel) cur)))
+  (none))
